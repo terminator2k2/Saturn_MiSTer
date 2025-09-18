@@ -1,7 +1,7 @@
 name: CI Build (Dual SDRAM)
 
 on:
-  #push:
+  push:
   workflow_dispatch:
 
 jobs:
