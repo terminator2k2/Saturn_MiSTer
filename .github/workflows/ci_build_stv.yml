@@ -1,4 +1,4 @@
-name: CI Build
+name: CI Build (ST-V)
 
 on:
   push:
@@ -14,6 +14,11 @@ jobs:
     - name: Build
       run: set -o pipefail && curl --fail --location https://raw.githubusercontent.com/MiSTer-unstable-nightlies/Build-Automation_MiSTer/main/build.sh | bash -
       env:
+        CORE_NAME: ST-V
+        RELEASE_NAME: Saturn
+        COMPILATION_COMMAND: /opt/intelFPGA_lite/quartus/bin/quartus_sh --flow compile STV.qpf
+        COMPILATION_OUTPUT: output_files/STV.rbf
+
         REPOSITORY: ${{ github.repository }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         DISPATCH_TOKEN: ${{ secrets.BUILD_AUTOMATION_DISPATCH_TOKEN }}
