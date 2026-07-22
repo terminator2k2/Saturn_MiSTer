@@ -182,13 +182,13 @@ module emu
 	assign VGA_DISABLE = 0;
 	
 `ifndef STV_BUILD
-    assign LED_DISK  = CD_BUF_RD;
-    assign LED_USER  = bk_state;
+	assign LED_DISK  = cdd_download;
+	assign LED_USER  = sav_pending;
 `else
-    assign LED_DISK  = 0;
-    assign LED_USER  = 0;
+	assign LED_DISK  = 0;
+	assign LED_USER  = 0;
 `endif    
-    assign LED_POWER = 0;
+	assign LED_POWER = 0;
 	assign VGA_SCALER= 0;
 	assign HDMI_BLACKOUT = 1;
 	assign HDMI_BOB_DEINT = status[29];
@@ -827,24 +827,33 @@ module emu
 	                    (!SMPC_DOTSEL ? 53375000 : 56875000);
 
 	
-	wire SMPC_CE;		//SMPC clock 4.0000MHz
-	CEGen SMPC_CEGen
-	(
-		.CLK(clk_sys),
-		.RST_N(1),
-		.IN_CLK(in_clk),
-		.OUT_CLK(4000000),
-		.CE(SMPC_CE)
-	);
-	
-	wire SCSP_CE;		//SCSP clock 22.5792MHz
+	wire SCSP_2X_CE;
 	CEGen SCSP_CEGen
 	(
 		.CLK(clk_sys),
 		.RST_N(1),
 		.IN_CLK(in_clk),
-		.OUT_CLK(22579200),
-		.CE(SCSP_CE)
+		.IN_CE(1),
+		.OUT_CLK(22579200*2),
+		.CE(SCSP_2X_CE)
+	);
+	
+	wire SCSP_CE;		//SCSP clock 22.5792MHz
+	wire SCSP_DIV;
+	always @(posedge clk_sys) 
+		if (SCSP_2X_CE) SCSP_DIV <= ~SCSP_DIV;
+		
+	assign SCSP_CE = SCSP_2X_CE & SCSP_DIV;
+		
+	wire SMPC_CE;		//SMPC clock 4.0000MHz
+	CEGen SMPC_CEGen
+	(
+		.CLK(clk_sys),
+		.RST_N(1),
+		.IN_CLK(22579200*2),
+		.IN_CE(SCSP_2X_CE),
+		.OUT_CLK(4000000),
+		.CE(SMPC_CE)
 	);
 	
 	wire CD_CE;			//CD clock freq 20.000MHz
@@ -852,7 +861,8 @@ module emu
 	(
 		.CLK(clk_sys),
 		.RST_N(1),
-		.IN_CLK(in_clk),
+		.IN_CLK(22579200*2),
+		.IN_CE(SCSP_2X_CE),
 		.OUT_CLK(20000000*2),
 		.CE(CD_CE)
 	);
@@ -862,7 +872,8 @@ module emu
 	(
 		.CLK(clk_sys),
 		.RST_N(1),
-		.IN_CLK(in_clk),
+		.IN_CLK(22579200*2),
+		.IN_CE(SCSP_2X_CE),
 		.OUT_CLK(44100*2*2),
 		.CE(CDD_2X_CE)
 	);
@@ -1160,7 +1171,7 @@ module emu
 	);
 `endif
 	
-	assign USERJOYSTICKOUT = SMPC_PDR1O;	
+	assign USERJOYSTICKOUT = SMPC_PDR1O | ~SMPC_DDR1;	
 	
 `ifndef STV_BUILD
 	HPS2PAD PAD
@@ -1226,7 +1237,7 @@ module emu
 	lightgun  lightgun_p1
 	(
 		.CLK(clk_sys),
-		.RESET(~rst_sys),
+		.RESET(rst_sys),
 
 		.MOUSE(ps2_mouse),
 		.MOUSE_XY(gun_p1_xy_mode),		// 0=Use joystick to control LGun XY.
@@ -1283,7 +1294,7 @@ module emu
 	lightgun  lightgun_p2
 	(
 		.CLK(clk_sys),
-		.RESET(~rst_sys),
+		.RESET(rst_sys),
 
 		.MOUSE(ps2_mouse),
 		.MOUSE_XY(gun_p2_xy_mode),		// 0=Use joystick to control LGun XY.
@@ -1962,6 +1973,7 @@ module emu
 	end
 
 	assign sd_buff_din = tmpram_sd_buff_q; 
+	assign ioctl_upload_req = 0;
 `else
 	wire bk_change  = (~SRAM_CS_N & ~MEM_DQM_N[0]);
 	wire bk_load    = status[24];
@@ -2104,7 +2116,7 @@ module emu
 	wire [7:0] crop_b = (hcrop_en && hcrop_blank) ? 8'd0 : cofi_b;
 `endif
 
-	video_mixer #(.LINE_LENGTH((352*2)+8), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
+	video_mixer #(.LINE_LENGTH(8), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
 	(
 		.*,
 	

@@ -2370,12 +2370,12 @@ module VDP2 (
 					end
 				end
 				
-				if (NBG_FETCH_START_EN) begin
-					NBG_CDC[0] <= '{8{'0}}; NBG_CDP[0] <= CDP_NULL; NBG_CDP[4] <= CDP_NULL; NBG_CDP[6] <= CDP_NULL;
-					NBG_CDC[1] <= '{8{'0}}; NBG_CDP[1] <= CDP_NULL; NBG_CDP[5] <= CDP_NULL; NBG_CDP[7] <= CDP_NULL;
-					NBG_CDC[2] <= '{8{'0}}; NBG_CDP[2] <= CDP_NULL; 
-					NBG_CDC[3] <= '{8{'0}}; NBG_CDP[3] <= CDP_NULL; 
-				end
+//				if (NBG_FETCH_START_EN) begin
+//					NBG_CDC[0] <= '{8{'0}}; NBG_CDP[0] <= CDP_NULL; NBG_CDP[4] <= CDP_NULL; NBG_CDP[6] <= CDP_NULL;
+//					NBG_CDC[1] <= '{8{'0}}; NBG_CDP[1] <= CDP_NULL; NBG_CDP[5] <= CDP_NULL; NBG_CDP[7] <= CDP_NULL;
+//					NBG_CDC[2] <= '{8{'0}}; NBG_CDP[2] <= CDP_NULL; 
+//					NBG_CDC[3] <= '{8{'0}}; NBG_CDP[3] <= CDP_NULL; 
+//				end
 					
 				NEN[3] = 0;
 				if (BG_PIPE[3].NxCH[0] && NSxREG[0].CHCN[2]) begin
@@ -2463,7 +2463,7 @@ module VDP2 (
 						default:;
 					endcase
 				end
-				if (NEN[3]) begin
+				if (NEN[3] && NCHEN[3]) begin
 					case (NCHCN[3])
 						3'b000: begin				//4bits/dot, 16 colors
 							if (!NCNT[3][2] && NCNT[3][0] == 2'b11 && NSxREG[1].ZMQT && NSxREG[1].ON) begin
@@ -2563,7 +2563,7 @@ module VDP2 (
 						default:;
 					endcase
 				end
-				if (NEN[2]) begin
+				if (NEN[2] && NCHEN[2]) begin
 					case (NCHCN[2])
 						3'b000: begin				//4bits/dot, 16 colors
 							if (!NCNT[2][2] && NCNT[2][1:0] == 2'b11 && NSxREG[0].ZMQT && NSxREG[0].ON) begin
@@ -2672,7 +2672,7 @@ module VDP2 (
 						default:;
 					endcase
 				end
-				if (NEN[1]) begin
+				if (NEN[1] && NCHEN[1]) begin
 					case (NCHCN[1])
 						3'b000: begin				//4bits/dot, 16 colors
 							if (NCNT[1][0] && (NSxREG[1].ZMHF || NSxREG[1].ZMQT) && NSxREG[1].ON) begin
@@ -2773,7 +2773,7 @@ module VDP2 (
 						default:;
 					endcase
 				end
-				if (NEN[0]) begin
+				if (NEN[0] && NCHEN[0]) begin
 					case (NCHCN[0])
 						3'b000: begin				//4bits/dot, 16 colors
 							if (NCNT[0][0] && (NSxREG[0].ZMHF || NSxREG[0].ZMQT) && NSxREG[0].ON) begin
@@ -3557,23 +3557,13 @@ module VDP2 (
 	//Color RAM
 	wire         PAL_SEL = (A[20:19] == 2'b10) && !CS_N && !AD_N;	//100000-17FFFF
 	wire         PAL_WE = PAL_SEL && !WE_N && !DTEN_N && !REQ_N;
-	wire [10: 1] IO_PAL_A   = REGS.RAMCTL.CRMD >= 2'b10 ? A[11:2] : A[10:1];
+	wire [11: 1] IO_PAL_ADDR = AD_N ? {A[11:9],DI[7:0]} : A[11:1];
+	wire [10: 1] IO_PAL_A   = REGS.RAMCTL.CRMD >= 2'b10 ? IO_PAL_ADDR[11:2] : IO_PAL_ADDR[10:1];
 	wire         IO_PAL0_WE = (REGS.RAMCTL.CRMD == 2'b01 ? ~A[11] : REGS.RAMCTL.CRMD >= 2'b10 ? ~A[1] : 1'b1) & PAL_WE;
 	wire         IO_PAL1_WE = (REGS.RAMCTL.CRMD == 2'b01 ?  A[11] : REGS.RAMCTL.CRMD >= 2'b10 ?  A[1] : 1'b1) & PAL_WE;
 	wire [10: 1] PAL_A = PAL_N[9:0];
 	
-	bit          IO_PAL_RD;
-	always @(posedge CLK or negedge RST_N) begin
-		if (!RST_N) begin
-			// synopsys translate_off
-			IO_PAL_RD <= 0;
-			// synopsys translate_on
-		end else begin
-			if (PAL_SEL && WE_N && DTEN_N && !REQ_N) begin
-				IO_PAL_RD <= REGS.RAMCTL.CRMD >= 2'b10 ? A[1] : A[11];
-			end
-		end
-	end
+	wire         IO_PAL_RD = REGS.RAMCTL.CRMD >= 2'b10 ? A[1] : A[11];
 	
 	VDP2_PAL_RAM pal1
 	(
@@ -3604,7 +3594,6 @@ module VDP2 (
 		.WREN_B({2{IO_PAL1_WE}}),
 		.Q_B(PAL1_DO)
 	);
-	wire [15:0] PAL_DO = !IO_PAL_RD ? PAL0_DO : PAL1_DO;
 	
 	bit  [10:1] CT_CRAM_A;
 	bit  [31:0] CT_CRAM_Q;
@@ -3645,6 +3634,7 @@ module VDP2 (
 	bit [15: 0] REG_DO;
 	bit         REG_RRDY;
 	bit [ 8: 1] REG_RA;
+	bit [15: 0] PAL_DO;
 	always @(posedge CLK or negedge RST_N) begin
 		bit         EXLAT_N_OLD;
 		bit [ 3: 0] REG_RD_DELAY;
@@ -4096,6 +4086,10 @@ module VDP2 (
 				if (REG_SEL && WE_N && !REQ_N) begin
 					REG_RA <= A[8:1];
 					REG_RRDY <= 0;
+				end
+				
+				if (PAL_SEL && WE_N && !REQ_N) begin
+					PAL_DO <= !IO_PAL_RD ? PAL0_DO : PAL1_DO;
 				end
 			end
 			if (CE_R) begin
